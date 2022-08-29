@@ -3,16 +3,14 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 
-contract NFTMinter is ERC721URIStorage, Ownable {
+contract NFTMinter is ERC721, ERC721URIStorage {
     uint256 private mintingFee;
+    address public owner;
 
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIds;
-
-    mapping(uint256 => string) private _tokenURIs;
 
     struct RenderNft {
         uint256 id;
@@ -25,40 +23,28 @@ contract NFTMinter is ERC721URIStorage, Ownable {
         string memory _symbol
     ) ERC721(_name, _symbol) {
         mintingFee = _mintingFee;
+        owner = msg.sender;
     }
 
-    function mintNFT(string memory _tokenURI) public payable returns (uint256) {
+    /// @dev allow users to mint an NFT
+    function mintNFT(string calldata _tokenURI)
+        external
+        payable
+        returns (uint256)
+    {
         require(msg.value == mintingFee, "must pay minting fee");
 
         uint256 newItemId = _tokenIds.current();
+        _tokenIds.increment();
         _mint(msg.sender, newItemId);
         _setTokenURI(newItemId, _tokenURI);
-
-        payable(owner()).transfer(msg.value);
-        _tokenIds.increment();
+        (bool success, ) = payable(owner).call{value: msg.value}("");
+        require(success, "Transfer of mint fee failed");
 
         return newItemId;
     }
 
-    function _setTokenURI(uint256 tokenId, string memory _tokenURI)
-        internal
-        override
-    {
-        _tokenURIs[tokenId] = _tokenURI;
-    }
-
-    function tokenURI(uint256 tokenId)
-        public
-        view
-        virtual
-        override
-        returns (string memory)
-    {
-        require(_exists(tokenId));
-        string memory _tokenURI = _tokenURIs[tokenId];
-        return _tokenURI;
-    }
-
+    /// @dev allow caller to retrieves all the NFTs minted
     function getAllNfts() public view returns (RenderNft[] memory) {
         uint256 lastestId = _tokenIds.current();
         RenderNft[] memory items = new RenderNft[](lastestId);
@@ -69,6 +55,7 @@ contract NFTMinter is ERC721URIStorage, Ownable {
         return items;
     }
 
+    /// @dev retrieves all the NFTs owned by the caller
     function getMyNfts() public view returns (RenderNft[] memory) {
         uint256 lastestId = _tokenIds.current();
         uint256 myNftsCount = balanceOf(msg.sender);
@@ -88,5 +75,23 @@ contract NFTMinter is ERC721URIStorage, Ownable {
 
     function getMintingFee() public view returns (uint256) {
         return mintingFee;
+    }
+
+    // The following functions are overrides required by Solidity.
+
+    function _burn(uint256 tokenId)
+        internal
+        override(ERC721, ERC721URIStorage)
+    {
+        super._burn(tokenId);
+    }
+
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override(ERC721, ERC721URIStorage)
+        returns (string memory)
+    {
+        return super.tokenURI(tokenId);
     }
 }
